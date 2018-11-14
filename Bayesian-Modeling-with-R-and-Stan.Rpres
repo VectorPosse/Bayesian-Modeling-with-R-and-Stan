@@ -722,8 +722,20 @@ class: small-code
 
 * Slopes are not expected to be negative.
     - More dysfunction at admission will predict more at discharge.
-* But they should be less than 1.
-    - Patients should not leave more dysfunctional than when they entered.
+
+```{r}
+score_summary %>%
+    filter(str_detect(.$param, pattern = "^b"))
+```
+
+
+Real data
+========================================================
+transition: none
+class: small-code
+
+* But slopes should be less than 1.
+    - Patients with more dysfunction at admission should improve more.
 
 ```{r}
 score_summary %>%
@@ -735,7 +747,7 @@ Real data
 ========================================================
 transition: none
 
-Crosses are mean discharge scores per program. Hierarchical modeling "partially pools" toward the overall means.
+Program intercepts and segment connecting `gamma_a[1]` and `gamma_a[1] + gamma_a[2]`.
 
 ```{r, echo = FALSE}
 library(broom)
@@ -763,6 +775,7 @@ score_summary_int_all <- score_summary %>%
                       pattern = "^a" )) %>%
     mutate(program_id = programs$program_id,
            program_type = programs$program_type,
+           program_type_int = ifelse(program_type == "A", 0, 1),
            program_count = programs$n)
 
 score_summary_int_6 <- score_summary_int_all %>%
@@ -789,14 +802,18 @@ score_summary_gamma <- score_summary %>%
 score_summary_lines_6 <- inner_join(score_summary_int_6, score_summary_slope_6)
 ```
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, fig.width = 12}
 ggplot(patients_group, aes(y = score_discharge, x = program_type_int)) +
-    geom_jitter(width = 0.2, alpha = 0.5) +
+    geom_jitter(width = 0.2, alpha = 0.05) +
+    geom_jitter(data = score_summary_int_all,
+                aes(y = mean, x = program_type_int),
+                width = 0.1, size = 3) +
     scale_x_discrete(limits = 0:1, labels = c("A", "B")) +
-    geom_abline(intercept = score_summary_gamma$mean[1],
-                slope = score_summary_gamma$mean[2],
-                color = "red", size = 2) +
-    labs(y = "Score on discharge",
+    geom_segment(x = 0, y = score_summary_gamma$mean[1],
+                 xend = 1, yend = score_summary_gamma$mean[1] +
+                     score_summary_gamma$mean[2],
+                 color = "red", size = 2) +
+    labs(y = "Score at discharge",
          x = "Program type") +
     slide_theme_1
 
@@ -806,6 +823,8 @@ ggplot(patients_group, aes(y = score_discharge, x = program_type_int)) +
 Real data
 ========================================================
 transition: none
+
+Crosses are mean discharge scores per program. Hierarchical modeling "partially pools" toward the overall means.
 
 ```{r, echo = FALSE, fig.width = 12}
 ggplot(score_summary_int_all) +
@@ -820,12 +839,13 @@ ggplot(score_summary_int_all) +
     scale_color_viridis_c() +
     geom_point(data = group_means, aes(y = mean,
                                        x = program_id),
-               shape = 4, size = 5) +
+               shape = 4, size = 8) +
     geom_hline(data = group_means_by_type,
                aes(yintercept = mean),
                color = "red") +
     labs(y = "Intercept",
-         x = "Program ID") +
+         x = "Program ID",
+         color = "Program count") +
     slide_theme_1
 ```
 
@@ -834,9 +854,7 @@ Real data
 ========================================================
 transition: none
 
-Blue = "No pooling", Green = "Complete pooling"
-
-Red = "Partial pooling (from multilevel model)"
+Blue = "No pooling", Green = "Complete pooling", Red = "Partial pooling"
 
 ```{r, echo = FALSE, fig.width = 12}
 ggplot(filter(patients, program_id %in% 1:6),
@@ -852,10 +870,58 @@ ggplot(filter(patients, program_id %in% 1:6),
                 slope = complete_pooling$estimate[2],
                 color = "green", size = 2) +
     facet_wrap("program_id") +
-    labs(y = "Score on discharge",
-         x = "Centered score on admit") +
+    labs(y = "Score at discharge",
+         x = "Centered score at admit") +
     slide_theme_1
 ```
+
+
+Resources
+========================================================
+
+<div align="center">
+<img src="./images/Kruschke.jpg" alt="Kruschke" width = 50% height = 50%>
+</div>
+
+
+Resources
+========================================================
+transition: none
+
+<div align="center">
+<img src="./images/McElreath.jpg" alt="McElreath" width = 50% height = 50%>
+</div>
+
+
+Resources
+========================================================
+transition: none
+
+<div align="center">
+<img src="./images/Gelman_Hill.gif" alt="Gelman_Hill" width = 50% height = 50%>
+</div>
+
+
+Resources
+========================================================
+transition: none
+
+<div align="center">
+<img src="./images/BDA.png" alt="BDA" width = 50% height = 50%>
+</div>
+
+
+Resources
+========================================================
+transition: none
+
+Some packages that use Stan:
+
+* `brms` (Bürkner)
+* `rethinking` (McElreath, not on CRAN)
+* `rstanarm` (Gelman, Hill)
+* `shinystan` (Shiny dashboard for model diagnosis)
+
 
 
 Thank you!

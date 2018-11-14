@@ -980,8 +980,38 @@ class: small-code
 
 * Slopes are not expected to be negative.
     - More dysfunction at admission will predict more at discharge.
-* But they should be less than 1.
-    - Patients should not leave more dysfunctional than when they entered.
+
+
+```r
+score_summary %>%
+    filter(str_detect(.$param, pattern = "^b"))
+```
+
+```
+# A tibble: 26 x 11
+   param  mean  se_mean     sd `2.5%` `25%` `50%` `75%` `97.5%` n_eff  Rhat
+   <chr> <dbl>    <dbl>  <dbl>  <dbl> <dbl> <dbl> <dbl>   <dbl> <dbl> <dbl>
+ 1 b[1]  0.361 0.00301  0.123  0.153  0.277 0.346 0.429   0.642 1666. 1.00 
+ 2 b[2]  0.329 0.00129  0.0772 0.172  0.279 0.332 0.380   0.482 3562. 1.00 
+ 3 b[3]  0.278 0.00205  0.109  0.0711 0.207 0.276 0.346   0.504 2804. 1.00 
+ 4 b[4]  0.263 0.00155  0.0906 0.0872 0.204 0.262 0.319   0.441 3428. 1.000
+ 5 b[5]  0.222 0.00143  0.0882 0.0443 0.165 0.223 0.282   0.390 3803. 1.00 
+ 6 b[6]  0.234 0.00180  0.103  0.0172 0.170 0.236 0.300   0.435 3298. 1.00 
+ 7 b[7]  0.477 0.00236  0.108  0.286  0.403 0.469 0.546   0.710 2082. 1.00 
+ 8 b[8]  0.300 0.000669 0.0393 0.223  0.274 0.300 0.326   0.375 3448. 1.00 
+ 9 b[9]  0.385 0.000911 0.0608 0.267  0.346 0.385 0.425   0.504 4448. 1.000
+10 b[10] 0.223 0.000826 0.0542 0.118  0.188 0.224 0.259   0.330 4315. 1.000
+# ... with 16 more rows
+```
+
+
+Real data
+========================================================
+transition: none
+class: small-code
+
+* But slopes should be less than 1.
+    - Patients with more dysfunction at admission should improve more.
 
 
 ```r
@@ -1011,16 +1041,9 @@ Real data
 ========================================================
 transition: none
 
-Crosses are mean discharge scores per program. Hierarchical modeling "partially pools" toward the overall means.
+Program intercepts and segment connecting `gamma_a[1]` and `gamma_a[1] + gamma_a[2]`.
 
 
-
-![plot of chunk unnamed-chunk-40](Bayesian-Modeling-with-R-and-Stan-figure/unnamed-chunk-40-1.png)
-
-
-Real data
-========================================================
-transition: none
 
 ![plot of chunk unnamed-chunk-41](Bayesian-Modeling-with-R-and-Stan-figure/unnamed-chunk-41-1.png)
 
@@ -1029,11 +1052,66 @@ Real data
 ========================================================
 transition: none
 
-Blue = "No pooling", Green = "Complete pooling"
-
-Red = "Partial pooling (from multilevel model)"
+Crosses are mean discharge scores per program. Hierarchical modeling "partially pools" toward the overall means.
 
 ![plot of chunk unnamed-chunk-42](Bayesian-Modeling-with-R-and-Stan-figure/unnamed-chunk-42-1.png)
+
+
+Real data
+========================================================
+transition: none
+
+Blue = "No pooling", Green = "Complete pooling", Red = "Partial pooling"
+
+![plot of chunk unnamed-chunk-43](Bayesian-Modeling-with-R-and-Stan-figure/unnamed-chunk-43-1.png)
+
+
+Resources
+========================================================
+
+<div align="center">
+<img src="./images/Kruschke.jpg" alt="Kruschke" width = 50% height = 50%>
+</div>
+
+
+Resources
+========================================================
+transition: none
+
+<div align="center">
+<img src="./images/McElreath.jpg" alt="McElreath" width = 50% height = 50%>
+</div>
+
+
+Resources
+========================================================
+transition: none
+
+<div align="center">
+<img src="./images/Gelman_Hill.gif" alt="Gelman_Hill" width = 50% height = 50%>
+</div>
+
+
+Resources
+========================================================
+transition: none
+
+<div align="center">
+<img src="./images/BDA.png" alt="BDA" width = 50% height = 50%>
+</div>
+
+
+Resources
+========================================================
+transition: none
+
+Some packages that use Stan:
+
+* `brms` (Bürkner)
+* `rethinking` (McElreath, not on CRAN)
+* `rstanarm` (Gelman, Hill)
+* `shinystan` (Shiny dashboard for model diagnosis)
+
 
 
 Thank you!
