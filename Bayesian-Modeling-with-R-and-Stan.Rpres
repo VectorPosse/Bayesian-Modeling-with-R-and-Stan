@@ -1,0 +1,869 @@
+Bayesian Modeling with R and Stan
+========================================================
+author: Sean Raleigh
+date: November 14, 2018
+autosize: true
+
+R Users Group, Salt Lake City, UT
+
+<style>
+.small-code pre code {
+  font-size: 1em;
+}
+</style>
+
+========================================================
+
+<div align="center">
+<img src="./images/Westminster_Logo_primary_night.jpg" alt="Westminster College" width = 90% height = 90%>
+</div>
+
+
+========================================================
+
+<div align="center">
+<img src="./images/QUARC_logo_text.jpg" alt="QUARC" width = 70% height = 70%>
+</div>
+
+
+Preliminaries
+========================================================
+
+Load necessary packages:
+```{r, message = FALSE}
+library(tidyverse)
+library(triangle) # triangular distribution
+library(rstan)
+```
+
+Tell Stan not to recompile code that has already been compiled:
+
+```{r}
+rstan_options(auto_write = TRUE)
+```
+
+
+Bayes's Theorem
+========================================================
+
+$$Pr(A, B)$$
+
+
+Bayes's Theorem
+========================================================
+transition: none
+
+$$Pr(A, B) = Pr(A) Pr(B \mid A)$$
+
+
+Bayes's Theorem
+========================================================
+transition: none
+
+$$
+\begin{align*}
+Pr(A, B)    &= Pr(A) Pr(B \mid A) \\
+            &= Pr(B) Pr(A \mid B)
+\end{align*}
+$$
+
+
+Bayes's Theorem
+========================================================
+transition: none
+
+$$Pr(A \mid B) = \frac{Pr(A) Pr(B \mid A)}{Pr(B)}$$
+
+
+Bayesian Data Analysis
+========================================================
+
+$$Pr(\theta \mid X) = \frac{Pr(\theta) Pr(X \mid \theta)}{Pr(X)}$$
+
+
+Bayesian Data Analysis
+========================================================
+transition: none
+
+$$Pr(\theta \mid X) = \frac{Pr(\theta) Pr(X \mid \theta)}{\displaystyle{\int_{\theta} Pr(\theta) Pr(X \mid \theta) \, d\theta}}$$
+
+
+Bayesian Data Analysis
+========================================================
+transition: none
+
+$$Pr(\theta \mid X) \propto Pr(\theta) Pr(X \mid \theta)$$
+
+
+Bayesian Data Analysis
+========================================================
+transition: none
+
+$$
+\begin{align*}
+Pr(\theta \mid X)   &\propto Pr(\theta) Pr(X \mid \theta) \\
+posterior           &\propto prior \times likelihood
+\end{align*}
+$$
+
+
+Frequentist vs Bayesian
+========================================================
+
+| Frequentist   | Bayesian  |
+|---------------|-----------|
+| Probability is "long-run frequency" | Probability is "degree of certainty" |
+| $Pr(X \mid \theta)$ is a sampling distribution<br/>(function of $X$ with $\theta$ fixed) | $Pr(X \mid \theta)$ is a likelihood<br/>(function of $\theta$ with $X$ fixed) |
+| No prior  | Prior |
+| P-values (NHST) | Full probability model available for summary/decisions  |
+| Confidence intervals  | Credible intervals    |
+| Violates the "likelihood principle":<br/>&emsp;Sampling intention matters<br/>&emsp;Corrections for multiple testing<br/>&emsp;Adjustment for planned/post hoc testing | Respects the "likelihood principle":<br/>&emsp;Sampling intention is  irrelevant<br/>&emsp;No corrections for multiple testing<br/>&emsp;No adjustment for planned/post hoc testing |
+| Objective?    | Subjective?   |
+
+
+
+Binomial example
+========================================================
+
+```{r, echo = FALSE}
+# bayes_plot_continuous takes a prior function
+# and a likelihood function on a range of values,
+# calculates the posterior, and then plots all three functions.
+bayes_plot_continuous <- function(prior, likelihood, from, to) {
+    # Calculate the area under the likelihood function (by integration).
+    likelihood_area <- integrate(likelihood, from, to)
+
+    # Scale the likelihood function by its area.
+    likelihood_scaled <- function(theta) {
+        likelihood(theta)/likelihood_area$value
+    }
+
+    # Calculate the numerator of the posterior function.
+    posterior_numer <- function(theta) {
+        prior(theta) * likelihood(theta)
+    }
+
+    # Calculate the denominator of the posterior function (by integration).
+    posterior_denom <- integrate(posterior_numer, from, to)
+
+    # The posterior is just the ratio.
+    posterior <- function(theta) {
+        posterior_numer(theta)/posterior_denom$value
+        }
+
+    # Plot the posterior function.
+    posterior_plot <- ggplot(NULL, aes(x = x, color = col, linetype = col)) +
+        stat_function(data = data.frame(x = c(from, to), col = factor(1)),
+                      fun = prior, size = 2) +
+        stat_function(data = data.frame(x = c(from, to), col = factor(2)),
+                      fun = posterior, size = 2) +
+        stat_function(data = data.frame(x = c(from, to), col = factor(3)),
+                      fun = likelihood_scaled, size = 2) +
+        theme_bw() +
+        theme(panel.grid = element_blank()) +
+        labs(# title = "Prior, Posterior, and Scaled Likelihood",
+             x = expression(theta),
+             y = NULL) +
+        scale_colour_manual(name = "Function",
+                            values = c("blue", "black", "red"),
+                            labels = c("Prior",
+                                       "Posterior",
+                                       "Scaled Likelihood")) +
+        scale_linetype_manual(name = "Function",
+                              values = c("dotted", "solid", "dashed"),
+                              labels = c("Prior",
+                                         "Posterior",
+                                         "Scaled Likelihood"))
+    posterior_plot
+}
+
+slide_theme_1 <- theme(text = element_text(size = 36),
+                       legend.title = element_text(size = 24),
+                       legend.text = element_text(size = 24),
+                       legend.key.size = unit(3,"line"),
+                       axis.text.x = element_text(size = 24))
+```
+
+
+In 18 trials, we observe 12 successes.
+
+The likelihood function is expressed as follows:
+
+$$p(X = 12 \mid \theta) \propto \theta^{12} (1 - \theta)^{6}$$
+
+
+Binomial example
+========================================================
+transition: none
+
+```{r, echo = FALSE}
+likelihood1 <- function(theta) { dbinom(x = 12, size = 18, prob = theta) }
+```
+
+```{r, echo = FALSE, fig.width = 12}
+likelihood1_plot <- ggplot(data.frame(x = c(0,1)), aes(x = x)) +
+    stat_function(fun = likelihood1, size = 2) +
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    labs(title = "Binomial Likelihood",
+         x = expression(theta),
+         y = NULL) +
+    slide_theme_1
+likelihood1_plot
+```
+
+
+Binomial example
+========================================================
+transition: none
+
+Assume a uniform prior:
+
+$$p(\theta) = 1.$$
+
+Then the posterior is
+
+$$p(\theta \mid X) \propto p(\theta) p(X \mid \theta) = p(X \mid \theta).$$
+
+
+Binomial example
+========================================================
+transition: none
+
+```{r, echo = FALSE, fig.width = 12}
+prior1 <- function(theta) { 1 }
+bayes_plot_continuous(prior1, likelihood1, 0, 1) +
+    slide_theme_1
+```
+
+
+Binomial example
+========================================================
+transition: none
+
+Suppose we now choose a prior that is relatively far from the data, say, a normal distribution centered at 0.3 with standard deviation 0.1:
+
+$$\theta \sim N(0.3, 0.1).$$
+
+
+Binomial example
+========================================================
+transition: none
+
+```{r, echo = FALSE, fig.width = 12}
+prior2 <- function(theta) { dnorm(theta, mean = 0.3, sd = 0.1) }
+bayes_plot_continuous(prior2, likelihood1, 0, 1) +
+    slide_theme_1
+```
+
+
+Binomial example
+========================================================
+transition: none
+
+What about a prior that is close to the data? Something like
+
+$$\theta \sim N(0.7, 0.1).$$
+
+
+Binomial example
+========================================================
+transition: none
+
+```{r, echo = FALSE, fig.width = 12}
+prior3 <- function(theta) { dnorm(theta, mean = 0.7, sd = 0.1) }
+bayes_plot_continuous(prior3, likelihood1, 0, 1) +
+    slide_theme_1
+```
+
+
+Binomial example
+========================================================
+transition: none
+
+What about a triangular prior?
+
+
+Binomial example
+========================================================
+transition: none
+
+```{r, echo = FALSE, fig.width = 12}
+prior4 <- function(theta) { dtriangle(theta, a = 0, b = 1) }
+bayes_plot_continuous(prior4, likelihood1, 0, 1) +
+    slide_theme_1
+```
+
+
+Binomial example
+========================================================
+transition: none
+
+Instead of 12 successes in 18 trials, suppose we only observe 2 successes in 3 trials.
+
+
+Binomial example
+========================================================
+transition: none
+
+```{r, echo = FALSE, fig.width = 12}
+likelihood2 <- function(theta) { dbinom(x = 2, size = 3, prob = theta) }
+bayes_plot_continuous(prior1, likelihood2, 0, 1) +
+    slide_theme_1
+```
+
+
+Binomial example
+========================================================
+transition: none
+
+```{r, echo = FALSE, fig.width = 12}
+bayes_plot_continuous(prior2, likelihood2, 0, 1) +
+    slide_theme_1
+```
+
+
+Binomial example
+========================================================
+transition: none
+
+```{r, echo = FALSE, fig.width = 12}
+bayes_plot_continuous(prior3, likelihood2, 0, 1) +
+    slide_theme_1
+```
+
+
+Binomial example
+========================================================
+transition: none
+
+```{r, echo = FALSE, fig.width = 12}
+bayes_plot_continuous(prior4, likelihood2, 0, 1) +
+    slide_theme_1
+```
+
+
+Stan
+========================================================
+
+RStan requires data in a list:
+
+```{r}
+N <- 18  # Define the sample size
+y <- c(rep(1, 12), rep(0, 6))  # 12 S, 6 F
+stan_data <- list(N = N, y = y)
+stan_data
+```
+
+
+Stan
+========================================================
+transition: none
+
+```{r}
+bin_unif_model <-
+'
+data {
+    int<lower = 0> N;
+    int<lower = 0, upper = 1> y[N];
+}
+parameters {
+    real<lower = 0, upper = 1> theta;
+}
+model {
+    theta ~ uniform(0, 1);  // prior
+    y ~ bernoulli(theta);   // likelihood
+}
+'
+```
+
+
+Stan
+========================================================
+transition: none
+
+```{r, cache = TRUE}
+bin_unif <- stan_model(model_code =
+                           bin_unif_model)
+```
+
+
+Stan
+========================================================
+transition: none
+
+Now we sample from the model using our data.
+
+```{r, cache = TRUE}
+set.seed(42)
+fit_bin_unif <- sampling(bin_unif,
+                         data = stan_data)
+```
+
+
+========================================================
+transition: none
+
+<div align="center">
+<img src="./images/3_Chainz.png" alt="3 Chainz", width = 90% height = 90%>
+</div>
+
+
+Stan
+========================================================
+transition: none
+class: small-code
+
+```{r}
+fit_bin_unif
+```
+
+
+Stan
+========================================================
+transition: none
+
+```{r, fig.width =  12}
+stan_dens(fit_bin_unif) + xlim(0,1) +
+    slide_theme_1
+```
+
+
+Stan
+========================================================
+transition: none
+
+```{r}
+bin_norm1_model <-
+'
+data {
+    int<lower = 0> N;
+    int<lower = 0, upper = 1> y[N];
+}
+parameters {
+    real<lower = 0, upper = 1> theta;
+}
+model {
+    theta ~ normal(0.3, 0.1);   // prior
+    y ~ bernoulli(theta);       // likelihood
+}
+'
+```
+
+
+Stan
+========================================================
+transition: none
+
+```{r, cache = TRUE}
+bin_norm1 <- stan_model(model_code =
+                            bin_norm1_model)
+```
+
+
+Stan
+========================================================
+transition: none
+
+```{r, results = "hide", cache = TRUE}
+set.seed(42)
+fit_bin_norm1 <- sampling(bin_norm1,
+                          data = stan_data)
+```
+
+
+Stan
+========================================================
+transition: none
+class: small-code
+
+```{r}
+fit_bin_norm1
+```
+
+
+Stan
+========================================================
+transition: none
+
+```{r, fig.width =  12}
+stan_dens(fit_bin_norm1) + xlim(0,1) +
+    slide_theme_1
+```
+
+
+Real data
+========================================================
+
+Patient data:
+
+* `individual_level_data.csv`
+   - `program_id`
+   - `score_admit`
+   - `score_discharge`
+
+```{r}
+patients <- read_csv("./data/individual_level_data.csv")
+```
+
+26 programs.
+
+Scores can be from -16 to 240. (Higher scores indicate more dysfunction.)
+
+
+Real data
+========================================================
+transition: none
+
+```{r}
+patients
+```
+
+
+Real data
+========================================================
+transition: none
+
+Program data:
+
+* `program_level_data.csv`
+   - `program_id`
+   - `program_type`
+   - `n`
+
+```{r}
+programs <- read_csv("./data/program_level_data.csv")
+```
+
+Two types of programs ("A" and "B").
+
+
+Real data
+========================================================
+transition: none
+
+```{r}
+programs
+```
+
+
+Real data
+========================================================
+transition: none
+
+```{r}
+N <- NROW(patients)
+K <- NROW(programs)
+score_discharge <- patients$score_discharge
+program <- patients$program_id
+score_admit <- patients$score_admit -
+    mean(patients$score_admit) # Center score
+program_type <-
+    ifelse(programs$program_type == "A", 0, 1)
+
+score_data <-
+    list(N = N,
+         K = K,
+         score_discharge = score_discharge,
+         program = program,
+         score_admit = score_admit,
+         program_type = program_type)
+```
+
+
+Real data
+========================================================
+transition: none
+
+```{r}
+score_model_data <-
+'
+data {
+    int<lower = 0> N; // Sample size
+    int<lower = 0> K; // Group size
+    int<lower = 1, upper = K> program[N];
+
+    vector[N] score_discharge;
+    vector[N] score_admit;
+    vector<lower = 0, upper = 1>[K] program_type;
+}
+'
+```
+
+
+Real data
+========================================================
+transition: none
+
+```{r}
+score_model_params <-
+'
+parameters {
+    // hyperparameters
+    vector[2] gamma_a;
+    vector[2] gamma_b;
+    real<lower = 0> sigma_a;
+    real<lower = 0> sigma_b;
+
+    // Intercepts
+    vector[K] a;
+
+    // Slopes
+    vector[K] b;
+    real<lower = 0> sigma_score;
+}
+'
+```
+
+
+
+========================================================
+transition: none
+
+<div align="center">
+<img src="./images/Hierarchical_Xzibit.jpg" alt="Xzibit" width = 90% height = 90%>
+</div>
+
+
+Real data
+========================================================
+transition: none
+class: small-code
+
+```{r}
+score_model_model <-
+'
+model {
+    // hyperpriors
+    gamma_a[1] ~ normal(112, 64);   // Group A intercepts
+    gamma_a[2] ~ normal(0, 64);     // Group B intercept diffs
+    gamma_b[1] ~ normal(0, 2);      // Group A slopes
+    gamma_b[2] ~ normal(0, 1);      // Group B slope diffs
+    sigma_a ~ normal(0, 50) T[0, ];
+    sigma_b ~ normal(0, 50) T[0, ];
+
+    // priors
+    a ~ normal(gamma_a[1] + gamma_a[2] * program_type, sigma_a);
+    b ~ normal(gamma_b[1] + gamma_b[2] * program_type, sigma_b);
+    sigma_score ~ normal(0, 50) T[0, ];
+
+    // likelihood
+    for (i in 1:N) {
+        score_discharge[i] ~ normal(a[program[i]] +
+                                    b[program[i]] * score_admit[i],
+                                    sigma_score);
+    }
+}
+'
+```
+
+
+Real data
+========================================================
+transition: none
+
+```{r}
+score_model <- paste(score_model_data,
+                     score_model_params,
+                     score_model_model)
+```
+
+
+Real data
+========================================================
+transition: none
+
+```{r, cache = TRUE}
+score_stan <- stan_model(model_code =
+                             score_model)
+```
+
+
+Real data
+========================================================
+transition: none
+
+```{r, results = "hide", cache = TRUE}
+set.seed(42)
+score_fit <- sampling(score_stan,
+                      data = score_data)
+```
+
+
+Real data
+========================================================
+transition: none
+class: small-code
+
+```{r}
+score_fit
+```
+
+
+Real data
+========================================================
+transition: none
+class: small-code
+
+46 is the clinical cutoff.
+
+```{r}
+score_summary <- as_tibble(summary(score_fit)$summary,
+                           rownames = "param")
+score_summary %>%
+    filter(str_detect(.$param, pattern = "^a"))
+```
+
+
+Real data
+========================================================
+transition: none
+class: small-code
+
+* Slopes are not expected to be negative.
+    - More dysfunction at admission will predict more at discharge.
+* But they should be less than 1.
+    - Patients should not leave more dysfunctional than when they entered.
+
+```{r}
+score_summary %>%
+    filter(str_detect(.$param, pattern = "^b"))
+```
+
+
+Real data
+========================================================
+transition: none
+
+Crosses are mean discharge scores per program. Hierarchical modeling "partially pools" toward the overall means.
+
+```{r, echo = FALSE}
+library(broom)
+
+complete_pooling <- lm(score_discharge ~ score_admit, data = patients) %>%
+    tidy() %>%
+    select(estimate)
+
+group_means <- patients %>%
+    group_by(program_id) %>%
+    summarize(mean = mean(score_discharge)) %>%
+    inner_join(programs)
+
+group_means_by_type <- group_means %>%
+    inner_join(programs) %>%
+    group_by(program_type) %>%
+    summarize(mean = weighted.mean(mean, n))
+
+patients_group <- patients %>%
+    inner_join(programs) %>%
+    mutate(program_type_int = ifelse(program_type == "A", 0, 1))
+
+score_summary_int_all <- score_summary %>%
+    filter(str_detect(.$param,
+                      pattern = "^a" )) %>%
+    mutate(program_id = programs$program_id,
+           program_type = programs$program_type,
+           program_count = programs$n)
+
+score_summary_int_6 <- score_summary_int_all %>%
+    select(intercept = mean,
+           program_id, program_type, program_count) %>%
+    filter(program_id %in% 1:6)
+
+score_summary_slope_all <- score_summary %>%
+    filter(str_detect(.$param,
+                      pattern = "^b" )) %>%
+    mutate(program_id = programs$program_id,
+           program_type = programs$program_type,
+           program_count = programs$n)
+
+score_summary_slope_6 <- score_summary_slope_all %>%
+    select(slope = mean,
+           program_id, program_type, program_count) %>%
+    filter(program_id %in% 1:6)
+
+score_summary_gamma <- score_summary %>%
+    filter(str_detect(.$param,
+                      pattern = "^gamma"))
+
+score_summary_lines_6 <- inner_join(score_summary_int_6, score_summary_slope_6)
+```
+
+```{r, echo = FALSE}
+ggplot(patients_group, aes(y = score_discharge, x = program_type_int)) +
+    geom_jitter(width = 0.2, alpha = 0.5) +
+    scale_x_discrete(limits = 0:1, labels = c("A", "B")) +
+    geom_abline(intercept = score_summary_gamma$mean[1],
+                slope = score_summary_gamma$mean[2],
+                color = "red", size = 2) +
+    labs(y = "Score on discharge",
+         x = "Program type") +
+    slide_theme_1
+
+```
+
+
+Real data
+========================================================
+transition: none
+
+```{r, echo = FALSE, fig.width = 12}
+ggplot(score_summary_int_all) +
+    facet_grid(. ~ program_type) +
+    geom_point(aes(y = mean, x = program_id,
+                   color = program_count),
+               size = 5) +
+    geom_linerange(aes(x = program_id,
+                       ymin = `2.5%`, ymax = `97.5%`,
+                       color = program_count),
+                   size = 2) +
+    scale_color_viridis_c() +
+    geom_point(data = group_means, aes(y = mean,
+                                       x = program_id),
+               shape = 4, size = 5) +
+    geom_hline(data = group_means_by_type,
+               aes(yintercept = mean),
+               color = "red") +
+    labs(y = "Intercept",
+         x = "Program ID") +
+    slide_theme_1
+```
+
+
+Real data
+========================================================
+transition: none
+
+Blue = "No pooling", Green = "Complete pooling"
+
+Red = "Partial pooling (from multilevel model)"
+
+```{r, echo = FALSE, fig.width = 12}
+ggplot(filter(patients, program_id %in% 1:6),
+       aes(y = score_discharge,
+           x = score_admit - mean(score_admit))) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE, size = 2) +
+    geom_abline(data = score_summary_lines_6,
+                aes(intercept = intercept,
+                    slope = slope),
+                color = "red", size = 2) +
+    geom_abline(intercept = complete_pooling$estimate[1],
+                slope = complete_pooling$estimate[2],
+                color = "green", size = 2) +
+    facet_wrap("program_id") +
+    labs(y = "Score on discharge",
+         x = "Centered score on admit") +
+    slide_theme_1
+```
+
+
+Thank you!
+========================================================
+type:section
+
+[sraleigh@westminstercollege.edu](mailto:sraleigh@westminstercollege.edu)
+
+[github.com/VectorPosse](https://github.com/VectorPosse)
+
+[rpubs.com/VectorPosse](http://rpubs.com/VectorPosse)
